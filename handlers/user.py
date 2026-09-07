@@ -149,6 +149,8 @@ async def render_screen(screen_name: str, state: FSMContext, bot: Bot, chat_id: 
                 chat_id,
                 "Напишите ваше сообщение одним текстом — мы получим его и ответим.",
                 reply_markup=cancel_kb(),
+            ),
+        )
     elif screen_name == "rules":
         rules_text = (
             "<b>📜 Правила и условия работы</b>\n\n"
