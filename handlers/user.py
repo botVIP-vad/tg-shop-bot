@@ -74,7 +74,7 @@ async def render_screen(screen_name: str, state: FSMContext, bot: Bot, chat_id: 
             bot.send_message(
                 chat_id,
                 "Привет! 👋\\n\\n"
-                "Это бот для заказа профессиональных веб-сайтов. "
+                "Это бот для заказа сайтов. "
                 "Нажми «🌐 Заказать сайт», чтобы посмотреть доступные предложения."
                 + status_line,
                 reply_markup=main_menu_kb(is_admin(user_id)),
