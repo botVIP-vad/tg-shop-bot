@@ -9,13 +9,23 @@ from database import (
     clear_cart,
     create_order,
     get_active_offers,
+    get_all_offers,
     get_cart,
     get_offer,
     get_setting,
     remove_from_cart,
 )
-from handlers.helpers import safe_delete, transition
+from handlers.helpers import (
+    handle_bottom_menu_message,
+    pop_nav,
+    push_nav,
+    reset_nav,
+    transition,
+)
 from keyboards import (
+    admin_offer_detail_kb,
+    admin_offers_kb,
+    admin_panel_kb,
     cancel_kb,
     cart_kb,
     contact_options_kb,
@@ -23,7 +33,7 @@ from keyboards import (
     offer_detail_kb,
     offers_list_kb,
 )
-from states import ContactAdmin, MakeOrder
+from states import AddOffer, ContactAdmin, MakeOrder
 
 router = Router()
 
@@ -37,73 +47,225 @@ def format_cart_text(cart_items: list[dict]) -> str:
     return f"🛒 Ваша корзина:\n\n{lines}"
 
 
+async def render_screen(screen_name: str, state: FSMContext, bot: Bot, chat_id: int, user_id: int):
+    """Отрисовывает экран по его имени для навигации."""
+    if screen_name == "main":
+        await state.clear()
+        busy = (await get_setting("busy", "0")) == "1"
+        status_line = (
+            "\n\n🔴 Сейчас мы очень загружены, ответим чуть позже."
+            if busy
+            else "\n\n🟢 Сейчас принимаем новые заказы."
+        )
+        await transition(
+            state, bot, chat_id,
+            bot.send_message(
+                chat_id,
+                "Привет! 👋\n\n"
+                "Это бот для заказа сайтов. Нажми «🌐 Заказать сайт», чтобы посмотреть доступные предложения."
+                + status_line,
+                reply_markup=main_menu_kb(is_admin(user_id)),
+            ),
+        )
+
+    elif screen_name == "offers":
+        offers = await get_active_offers()
+        if not offers:
+            await transition(
+                state, bot, chat_id,
+                bot.send_message(chat_id, "Пока нет доступных предложений. Загляните позже 🙌", reply_markup=cancel_kb())
+            )
+        else:
+            await transition(
+                state, bot, chat_id,
+                bot.send_message(chat_id, "Выберите предложение:", reply_markup=offers_list_kb(offers))
+            )
+
+    elif screen_name.startswith("offer_detail:"):
+        offer_id = int(screen_name.split(":")[1])
+        offer = await get_offer(offer_id)
+        if not offer:
+            await render_screen("offers", state, bot, chat_id, user_id)
+            return
+
+        caption = f"<b>{offer['title']}</b>\n\n{offer['description']}\n\n💰 Цена: {offer['price']}"
+        if offer.get("photo_id"):
+            send_coro = bot.send_photo(
+                chat_id, photo=offer["photo_id"], caption=caption, reply_markup=offer_detail_kb(offer_id)
+            )
+        else:
+            send_coro = bot.send_message(chat_id, caption, reply_markup=offer_detail_kb(offer_id))
+        await transition(state, bot, chat_id, send_coro)
+
+    elif screen_name == "cart":
+        cart_items = await get_cart(user_id)
+        if not cart_items:
+            await transition(
+                state, bot, chat_id,
+                bot.send_message(chat_id, "🛒 Ваша корзина пуста. Загляните в каталог: «🌐 Заказать сайт».", reply_markup=cancel_kb())
+            )
+        else:
+            await transition(
+                state, bot, chat_id,
+                bot.send_message(chat_id, format_cart_text(cart_items), reply_markup=cart_kb(cart_items))
+            )
+
+    elif screen_name == "order_contact":
+        await state.set_state(MakeOrder.contact)
+        await transition(
+            state, bot, chat_id,
+            bot.send_message(
+                chat_id,
+                "Отлично! Оставьте, пожалуйста, контакт для связи "
+                "(номер телефона, @username или email):",
+                reply_markup=cancel_kb(),
+            ),
+        )
+
+    elif screen_name == "order_comment":
+        await state.set_state(MakeOrder.comment)
+        await transition(
+            state, bot, chat_id,
+            bot.send_message(
+                chat_id,
+                "Спасибо! Хотите добавить комментарий к заказу "
+                "(пожелания, сроки и т.д.)? Если нет — напишите «-».",
+                reply_markup=cancel_kb(),
+            ),
+        )
+
+    elif screen_name == "contact_options":
+        await transition(
+            state, bot, chat_id,
+            bot.send_message(chat_id, "Как вам удобнее связаться?", reply_markup=contact_options_kb(ADMIN_USERNAME)),
+        )
+
+    elif screen_name == "contact_admin_msg":
+        await state.set_state(ContactAdmin.message)
+        await transition(
+            state, bot, chat_id,
+            bot.send_message(
+                chat_id,
+                "Напишите ваше сообщение одним текстом — мы получим его и ответим.",
+                reply_markup=cancel_kb(),
+            ),
+        )
+
+    elif screen_name == "my_orders":
+        await transition(
+            state, bot, chat_id,
+            bot.send_message(
+                chat_id,
+                "Раздел «Мои заявки» можно расширить под ваши задачи — "
+                "например, показывать статус заказа. Сейчас просто ждите обратной связи от менеджера 🙂",
+                reply_markup=cancel_kb(),
+            ),
+        )
+
+    elif screen_name == "admin_panel":
+        await state.clear()
+        busy = (await get_setting("busy", "0")) == "1"
+        await transition(
+            state, bot, chat_id,
+            bot.send_message(chat_id, "⚙️ Админ-панель", reply_markup=admin_panel_kb(busy))
+        )
+
+    elif screen_name == "admin_offers":
+        offers = await get_all_offers()
+        if not offers:
+            await transition(
+                state, bot, chat_id,
+                bot.send_message(chat_id, "Офферов пока нет.", reply_markup=cancel_kb())
+            )
+        else:
+            await transition(
+                state, bot, chat_id,
+                bot.send_message(
+                    chat_id,
+                    "📋 Все офферы (🟢 активен / 🔴 скрыт):",
+                    reply_markup=admin_offers_kb(offers),
+                )
+            )
+
+    elif screen_name.startswith("admin_offer_detail:"):
+        offer_id = int(screen_name.split(":")[1])
+        offer = await get_offer(offer_id)
+        if not offer:
+            await render_screen("admin_offers", state, bot, chat_id, user_id)
+            return
+
+        caption = (
+            f"<b>{offer['title']}</b>\n\n{offer['description']}\n\n"
+            f"💰 {offer['price']}\nСтатус: {'🟢 активен' if offer['is_active'] else '🔴 скрыт'}"
+        )
+        if offer.get("photo_id"):
+            send_coro = bot.send_photo(
+                chat_id, photo=offer["photo_id"], caption=caption,
+                reply_markup=admin_offer_detail_kb(offer_id, offer["is_active"]),
+            )
+        else:
+            send_coro = bot.send_message(
+                chat_id, caption, reply_markup=admin_offer_detail_kb(offer_id, offer["is_active"])
+            )
+        await transition(state, bot, chat_id, send_coro)
+
+    elif screen_name == "add_offer_title":
+        await state.set_state(AddOffer.title)
+        await transition(
+            state, bot, chat_id,
+            bot.send_message(chat_id, "Введите название оффера (например: «Лендинг под ключ»):", reply_markup=cancel_kb())
+        )
+
+    elif screen_name == "add_offer_description":
+        await state.set_state(AddOffer.description)
+        await transition(
+            state, bot, chat_id,
+            bot.send_message(chat_id, "Введите описание оффера:", reply_markup=cancel_kb())
+        )
+
+    elif screen_name == "add_offer_price":
+        await state.set_state(AddOffer.price)
+        await transition(
+            state, bot, chat_id,
+            bot.send_message(chat_id, "Укажите цену (например: «от 15 000 ₽»):", reply_markup=cancel_kb())
+        )
+
+    elif screen_name == "add_offer_photo":
+        await state.set_state(AddOffer.photo)
+        await transition(
+            state, bot, chat_id,
+            bot.send_message(chat_id, "Пришлите изображение для этого оффера (одним фото):", reply_markup=cancel_kb())
+        )
+
+
+@router.callback_query(F.data.in_({"nav_back", "cancel", "back_to_offers"}))
+async def nav_back_handler(callback: CallbackQuery, state: FSMContext):
+    prev_screen = await pop_nav(state)
+    await render_screen(prev_screen, state, callback.bot, callback.message.chat.id, callback.from_user.id)
+    await callback.answer()
+
+
 @router.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext):
-    await state.clear()
-
-    busy = (await get_setting("busy", "0")) == "1"
-    status_line = (
-        "\n\n🔴 Сейчас мы очень загружены, ответим чуть позже."
-        if busy
-        else "\n\n🟢 Сейчас принимаем новые заказы."
-    )
-
-    await transition(
-        state, message.bot, message.chat.id,
-        message.answer(
-            "Привет! 👋\n\n"
-            "Это бот для заказа сайтов. Нажми «🌐 Заказать сайт», чтобы посмотреть доступные предложения."
-            + status_line,
-            reply_markup=main_menu_kb(is_admin(message.from_user.id)),
-        ),
-    )
-    await safe_delete(message)
+    await handle_bottom_menu_message(state, message.bot, message.chat.id, message.message_id)
+    await reset_nav(state, "main")
+    await render_screen("main", state, message.bot, message.chat.id, message.from_user.id)
 
 
 @router.message(F.text == "🌐 Заказать сайт")
 async def show_offers(message: Message, state: FSMContext):
-    offers = await get_active_offers()
-    if not offers:
-        await transition(state, message.bot, message.chat.id,
-                          message.answer("Пока нет доступных предложений. Загляните позже 🙌"))
-        await safe_delete(message)
-        return
-    await transition(state, message.bot, message.chat.id,
-                      message.answer("Выберите предложение:", reply_markup=offers_list_kb(offers)))
-    await safe_delete(message)
-
-
-@router.callback_query(F.data == "back_to_offers")
-async def back_to_offers(callback: CallbackQuery, state: FSMContext):
-    offers = await get_active_offers()
-    if not offers:
-        await transition(state, callback.bot, callback.message.chat.id,
-                          callback.message.answer("Пока нет доступных предложений."))
-        await callback.answer()
-        return
-    await transition(state, callback.bot, callback.message.chat.id,
-                      callback.message.answer("Выберите предложение:", reply_markup=offers_list_kb(offers)))
-    await callback.answer()
+    await handle_bottom_menu_message(state, message.bot, message.chat.id, message.message_id)
+    await reset_nav(state, "main")
+    await push_nav(state, "offers")
+    await render_screen("offers", state, message.bot, message.chat.id, message.from_user.id)
 
 
 @router.callback_query(F.data.startswith("offer:"))
 async def show_offer_detail(callback: CallbackQuery, state: FSMContext):
     offer_id = int(callback.data.split(":")[1])
-    offer = await get_offer(offer_id)
-    if not offer:
-        await callback.answer("Это предложение больше недоступно", show_alert=True)
-        return
-
-    caption = f"<b>{offer['title']}</b>\n\n{offer['description']}\n\n💰 Цена: {offer['price']}"
-
-    if offer.get("photo_id"):
-        send_coro = callback.message.answer_photo(
-            photo=offer["photo_id"], caption=caption, reply_markup=offer_detail_kb(offer_id)
-        )
-    else:
-        send_coro = callback.message.answer(caption, reply_markup=offer_detail_kb(offer_id))
-
-    await transition(state, callback.bot, callback.message.chat.id, send_coro)
+    screen_name = f"offer_detail:{offer_id}"
+    await push_nav(state, screen_name)
+    await render_screen(screen_name, state, callback.bot, callback.message.chat.id, callback.from_user.id)
     await callback.answer()
 
 
@@ -122,14 +284,10 @@ async def cart_add(callback: CallbackQuery):
 
 @router.message(F.text == "🛒 Корзина")
 async def show_cart(message: Message, state: FSMContext):
-    cart_items = await get_cart(message.from_user.id)
-    if not cart_items:
-        await transition(state, message.bot, message.chat.id,
-                          message.answer("🛒 Ваша корзина пуста. Загляните в каталог: «🌐 Заказать сайт»."))
-    else:
-        await transition(state, message.bot, message.chat.id,
-                          message.answer(format_cart_text(cart_items), reply_markup=cart_kb(cart_items)))
-    await safe_delete(message)
+    await handle_bottom_menu_message(state, message.bot, message.chat.id, message.message_id)
+    await reset_nav(state, "main")
+    await push_nav(state, "cart")
+    await render_screen("cart", state, message.bot, message.chat.id, message.from_user.id)
 
 
 @router.callback_query(F.data.startswith("cart_remove:"))
@@ -137,14 +295,7 @@ async def cart_remove(callback: CallbackQuery, state: FSMContext):
     offer_id = int(callback.data.split(":")[1])
     await remove_from_cart(callback.from_user.id, offer_id)
     await callback.answer("Убрано из корзины")
-
-    cart_items = await get_cart(callback.from_user.id)
-    if not cart_items:
-        await transition(state, callback.bot, callback.message.chat.id,
-                          callback.message.answer("🛒 Корзина пуста."))
-    else:
-        await transition(state, callback.bot, callback.message.chat.id,
-                          callback.message.answer(format_cart_text(cart_items), reply_markup=cart_kb(cart_items)))
+    await render_screen("cart", state, callback.bot, callback.message.chat.id, callback.from_user.id)
 
 
 @router.callback_query(F.data == "cart_checkout")
@@ -155,15 +306,8 @@ async def cart_checkout(callback: CallbackQuery, state: FSMContext):
         return
 
     await state.update_data(offer_ids=[c["id"] for c in cart_items], from_cart=True)
-    await state.set_state(MakeOrder.contact)
-    await transition(
-        state, callback.bot, callback.message.chat.id,
-        callback.message.answer(
-            "Оставьте, пожалуйста, контакт для связи по заказу из корзины "
-            "(номер телефона, @username или email):",
-            reply_markup=cancel_kb(),
-        ),
-    )
+    await push_nav(state, "order_contact")
+    await render_screen("order_contact", state, callback.bot, callback.message.chat.id, callback.from_user.id)
     await callback.answer()
 
 
@@ -178,31 +322,16 @@ async def start_order(callback: CallbackQuery, state: FSMContext):
         return
 
     await state.update_data(offer_ids=[offer_id], from_cart=False)
-    await state.set_state(MakeOrder.contact)
-    await transition(
-        state, callback.bot, callback.message.chat.id,
-        callback.message.answer(
-            "Отлично! Оставьте, пожалуйста, контакт для связи "
-            "(номер телефона, @username или email):",
-            reply_markup=cancel_kb(),
-        ),
-    )
+    await push_nav(state, "order_contact")
+    await render_screen("order_contact", state, callback.bot, callback.message.chat.id, callback.from_user.id)
     await callback.answer()
 
 
 @router.message(MakeOrder.contact)
 async def get_contact(message: Message, state: FSMContext):
     await state.update_data(contact=message.text)
-    await state.set_state(MakeOrder.comment)
-    await transition(
-        state, message.bot, message.chat.id,
-        message.answer(
-            "Спасибо! Хотите добавить комментарий к заказу "
-            "(пожелания, сроки и т.д.)? Если нет — напишите «-».",
-            reply_markup=cancel_kb(),
-        ),
-    )
-    await safe_delete(message)
+    await push_nav(state, "order_comment")
+    await render_screen("order_comment", state, message.bot, message.chat.id, message.from_user.id)
 
 
 @router.message(MakeOrder.comment)
@@ -231,7 +360,7 @@ async def get_comment(message: Message, state: FSMContext, bot: Bot):
     if data.get("from_cart"):
         await clear_cart(message.from_user.id)
 
-    await state.clear()
+    await reset_nav(state, "main")
     await transition(
         state, message.bot, message.chat.id,
         message.answer(
@@ -254,30 +383,21 @@ async def get_comment(message: Message, state: FSMContext, bot: Bot):
         except Exception:
             pass
 
-    await safe_delete(message)
-
 
 # --- Связь с админом ---
 
 @router.message(F.text == "💬 Написать нам")
 async def contact_menu(message: Message, state: FSMContext):
-    await transition(
-        state, message.bot, message.chat.id,
-        message.answer("Как вам удобнее связаться?", reply_markup=contact_options_kb(ADMIN_USERNAME)),
-    )
-    await safe_delete(message)
+    await handle_bottom_menu_message(state, message.bot, message.chat.id, message.message_id)
+    await reset_nav(state, "main")
+    await push_nav(state, "contact_options")
+    await render_screen("contact_options", state, message.bot, message.chat.id, message.from_user.id)
 
 
 @router.callback_query(F.data == "contact_via_bot")
 async def contact_via_bot(callback: CallbackQuery, state: FSMContext):
-    await state.set_state(ContactAdmin.message)
-    await transition(
-        state, callback.bot, callback.message.chat.id,
-        callback.message.answer(
-            "Напишите ваше сообщение одним текстом — мы получим его и ответим.",
-            reply_markup=cancel_kb(),
-        ),
-    )
+    await push_nav(state, "contact_admin_msg")
+    await render_screen("contact_admin_msg", state, callback.bot, callback.message.chat.id, callback.from_user.id)
     await callback.answer()
 
 
@@ -295,7 +415,7 @@ async def contact_receive(message: Message, state: FSMContext, bot: Bot):
         except Exception:
             pass
 
-    await state.clear()
+    await reset_nav(state, "main")
     await transition(
         state, message.bot, message.chat.id,
         message.answer(
@@ -303,16 +423,11 @@ async def contact_receive(message: Message, state: FSMContext, bot: Bot):
             reply_markup=main_menu_kb(is_admin(message.from_user.id)),
         ),
     )
-    await safe_delete(message)
 
 
 @router.message(F.text == "ℹ️ Мои заявки")
 async def my_orders_stub(message: Message, state: FSMContext):
-    await transition(
-        state, message.bot, message.chat.id,
-        message.answer(
-            "Раздел «Мои заявки» можно расширить под ваши задачи — "
-            "например, показывать статус заказа. Сейчас просто ждите обратной связи от менеджера 🙂"
-        ),
-    )
-    await safe_delete(message)
+    await handle_bottom_menu_message(state, message.bot, message.chat.id, message.message_id)
+    await reset_nav(state, "main")
+    await push_nav(state, "my_orders")
+    await render_screen("my_orders", state, message.bot, message.chat.id, message.from_user.id)

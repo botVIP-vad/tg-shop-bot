@@ -20,6 +20,7 @@ def offers_list_kb(offers: list[dict]) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     for o in offers:
         kb.button(text=f"{o['title']} — {o['price']}", callback_data=f"offer:{o['id']}")
+    kb.button(text="⬅️ Назад", callback_data="nav_back")
     kb.adjust(1)
     return kb.as_markup()
 
@@ -28,7 +29,7 @@ def offer_detail_kb(offer_id: int) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     kb.button(text="✅ Заказать этот сайт", callback_data=f"order:{offer_id}")
     kb.button(text="🛒 В корзину", callback_data=f"cart_add:{offer_id}")
-    kb.button(text="⬅️ Назад к списку", callback_data="back_to_offers")
+    kb.button(text="⬅️ Назад", callback_data="nav_back")
     kb.adjust(1)
     return kb.as_markup()
 
@@ -39,7 +40,7 @@ def cart_kb(cart_items: list[dict]) -> InlineKeyboardMarkup:
         kb.button(text=f"❌ Убрать: {item['title']}", callback_data=f"cart_remove:{item['id']}")
     if cart_items:
         kb.button(text="✅ Оформить заказ", callback_data="cart_checkout")
-    kb.button(text="⬅️ Назад к каталогу", callback_data="back_to_offers")
+    kb.button(text="⬅️ Назад", callback_data="nav_back")
     kb.adjust(1)
     return kb.as_markup()
 
@@ -48,7 +49,7 @@ def contact_options_kb(admin_username: str) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     kb.button(text="✍️ Написать через бота", callback_data="contact_via_bot")
     kb.button(text="🔗 Написать в Telegram", url=f"https://t.me/{admin_username}")
-    kb.button(text="⬅️ Назад", callback_data="cancel")
+    kb.button(text="⬅️ Назад", callback_data="nav_back")
     kb.adjust(1)
     return kb.as_markup()
 
@@ -59,7 +60,7 @@ def admin_panel_kb(busy: bool = False) -> InlineKeyboardMarkup:
     kb.button(text="📋 Список офферов", callback_data="admin_list_offers")
     status_text = "🔴 Занят — нажмите, чтобы освободиться" if busy else "🟢 Свободен — нажмите, чтобы отметить занятость"
     kb.button(text=status_text, callback_data="admin_toggle_busy")
-    kb.button(text="⬅️ Назад в меню", callback_data="cancel")
+    kb.button(text="⬅️ Назад", callback_data="nav_back")
     kb.adjust(1)
     return kb.as_markup()
 
@@ -69,6 +70,7 @@ def admin_offers_kb(offers: list[dict]) -> InlineKeyboardMarkup:
     for o in offers:
         status = "🟢" if o["is_active"] else "🔴"
         kb.button(text=f"{status} {o['title']}", callback_data=f"admin_offer:{o['id']}")
+    kb.button(text="⬅️ Назад", callback_data="nav_back")
     kb.adjust(1)
     return kb.as_markup()
 
@@ -78,12 +80,12 @@ def admin_offer_detail_kb(offer_id: int, is_active: int) -> InlineKeyboardMarkup
     toggle_text = "🔴 Скрыть" if is_active else "🟢 Показать"
     kb.button(text=toggle_text, callback_data=f"admin_toggle:{offer_id}")
     kb.button(text="🗑 Удалить", callback_data=f"admin_delete:{offer_id}")
-    kb.button(text="⬅️ К списку офферов", callback_data="admin_list_offers")
+    kb.button(text="⬅️ Назад", callback_data="nav_back")
     kb.adjust(1)
     return kb.as_markup()
 
 
 def cancel_kb() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    kb.button(text="❌ Отмена", callback_data="cancel")
+    kb.button(text="⬅️ Назад", callback_data="nav_back")
     return kb.as_markup()
