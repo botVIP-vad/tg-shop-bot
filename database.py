@@ -176,3 +176,37 @@ async def set_setting(key: str, value: str):
             (key, value),
         )
         await db.commit()
+
+
+# --- Промокоды ---
+
+VALID_PROMO_CODES = {
+    "BADG5": 5,
+    "MILKA5": 5,
+    "WELV5": 5,
+}
+
+
+async def has_orders(user_id: int) -> bool:
+    """Проверяет, есть ли у пользователя хотя бы один заказ."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute("SELECT 1 FROM orders WHERE user_id = ? LIMIT 1", (user_id,))
+        row = await cur.fetchone()
+        return row is not None
+
+
+async def save_user_promo(user_id: int, code: str):
+    """Сохраняет применённый промокод пользователя."""
+    await set_setting(f"promo_{user_id}", code)
+
+
+async def get_user_promo(user_id: int) -> str:
+    """Возвращает применённый промокод пользователя (пустая строка если нет)."""
+    return await get_setting(f"promo_{user_id}", "")
+
+
+async def clear_user_promo(user_id: int):
+    """Удаляет применённый промокод пользователя."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("DELETE FROM settings WHERE key = ?", (f"promo_{user_id}",))
+        await db.commit()

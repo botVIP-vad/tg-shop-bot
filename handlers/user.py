@@ -7,19 +7,25 @@ from config import ADMIN_IDS, ADMIN_USERNAME
 from database import (
     add_to_cart,
     clear_cart,
+    clear_user_promo,
     create_order,
     get_active_offers,
     get_all_offers,
     get_cart,
     get_offer,
     get_setting,
+    get_user_promo,
+    has_orders,
     remove_from_cart,
+    save_user_promo,
+    VALID_PROMO_CODES,
 )
 from handlers.helpers import (
     handle_bottom_menu_message,
     pop_nav,
     push_nav,
     reset_nav,
+    safe_delete,
     transition,
 )
 from keyboards import (
@@ -33,7 +39,7 @@ from keyboards import (
     offer_detail_kb,
     offers_list_kb,
 )
-from states import AddOffer, ContactAdmin, MakeOrder
+from states import AddOffer, ContactAdmin, EnterPromo, MakeOrder
 
 router = Router()
 
@@ -157,15 +163,15 @@ async def render_screen(screen_name: str, state: FSMContext, bot: Bot, chat_id: 
             "<b>1. 💳 Способы и порядок оплаты:</b>\n"
             "• <b>Принимаем:</b> СБП / Карты, Криптовалюта (USDT / TON / BTC), Telegram Stars ⭐️\n"
             "• 🎁 <b>Скидка 10%</b> при оплате в <b>криптовалюте</b>!\n"
+            "• 🎉 <b>Скидка 10% на первый заказ</b> для новых клиентов!\n"
+            "• 🎁 <b>Промокоды</b> — введите код в разделе «🎟 Промокод» для дополнительной скидки 5%!\n"
             "• <b>Предоплата:</b> 30% от стоимости заказа перед началом разработки.\n"
             "• <b>Окончательный расчет:</b> оставшиеся 70% выплачиваются после полного завершения проекта и демонстрации результата.\n\n"
             "<b>2. 📋 Согласование ТЗ:</b>\n"
             "• Все требования и ключевые детали проекта фиксируются до старта работы.\n\n"
             "<b>3. 🛠 Правки и доработки:</b>\n"
             "• Бесплатные правки и корректировки в рамках утвержденного ТЗ.\n\n"
-            "<b>4. 🔒 Гарантия и поддержка:</b>\n"
-            "• <b>30 дней</b> бесплатной технической поддержки и устранения ошибок после передачи проекта.\n\n"
-            "<b>5. 🤝 Прозрачность:</b>\n"
+            "<b>4. 🤝 Прозрачность:</b>\n"
             "• Регулярная демонстрация промежуточных результатов в процессе разработки."
         )
         await transition(
@@ -351,6 +357,13 @@ async def get_comment(message: Message, state: FSMContext, bot: Bot):
     offer_ids = data.get("offer_ids", [])
     comment = "" if message.text == "-" else message.text
 
+    # Проверяем скидки
+    is_first_order = not await has_orders(message.from_user.id)
+    promo_code = await get_user_promo(message.from_user.id)
+    promo_discount = VALID_PROMO_CODES.get(promo_code, 0) if promo_code else 0
+    first_order_discount = 10 if is_first_order else 0
+    total_discount = first_order_discount + promo_discount
+
     order_ids = []
     titles = []
     for offer_id in offer_ids:
@@ -371,22 +384,51 @@ async def get_comment(message: Message, state: FSMContext, bot: Bot):
     if data.get("from_cart"):
         await clear_cart(message.from_user.id)
 
+    # Очищаем промокод после использования
+    if promo_code:
+        await clear_user_promo(message.from_user.id)
+
     await reset_nav(state, "main")
+
+    # Формируем текст о скидках
+    discount_lines = []
+    if is_first_order:
+        discount_lines.append("🎉 <b>Скидка 10% на первый заказ!</b>")
+    if promo_code:
+        discount_lines.append(f"🎁 <b>Промокод {promo_code} → скидка {promo_discount}%!</b>")
+    discount_text = "\n".join(discount_lines)
+
+    user_msg = "✅ Заявка принята! Мы свяжемся с вами в ближайшее время."
+    if discount_text:
+        user_msg = f"✅ Заявка принята!\n\n{discount_text}\n\nМы свяжемся с вами в ближайшее время."
+
     await transition(
         state, message.bot, message.chat.id,
         message.answer(
-            "✅ Заявка принята! Мы свяжемся с вами в ближайшее время.",
+            user_msg,
             reply_markup=main_menu_kb(is_admin(message.from_user.id)),
         ),
     )
 
     titles_text = "\n".join(f"- {t}" for t in titles) or "—"
+
+    # Информация о скидках для админа
+    admin_discount_parts = []
+    if is_first_order:
+        admin_discount_parts.append("скидка 10% (первый заказ)")
+    if promo_code:
+        admin_discount_parts.append(f"промокод {promo_code} (-{promo_discount}%)")
+    discount_admin_text = ""
+    if admin_discount_parts:
+        discount_admin_text = f"\n🏷 Скидки: {', '.join(admin_discount_parts)} (итого -{total_discount}%)"
+
     admin_text = (
         f"🆕 <b>Новая заявка</b> (номера: {', '.join('#' + str(i) for i in order_ids)})\n\n"
         f"Товары:\n{titles_text}\n\n"
         f"Клиент: {message.from_user.full_name} (@{message.from_user.username})\n"
         f"Контакт: {data['contact']}\n"
         f"Комментарий: {comment or '—'}"
+        f"{discount_admin_text}"
     )
     for admin_id in ADMIN_IDS:
         try:
@@ -443,6 +485,55 @@ async def show_rules(message: Message, state: FSMContext):
     await push_nav(state, "rules")
     await render_screen("rules", state, message.bot, message.chat.id, message.from_user.id)
 
+
+# --- Промокод ---
+
+@router.message(F.text == "🎟 Промокод")
+async def promo_button(message: Message, state: FSMContext):
+    await handle_bottom_menu_message(state, message.bot, message.chat.id, message.message_id)
+    await reset_nav(state, "main")
+    await push_nav(state, "enter_promo")
+    await state.set_state(EnterPromo.code)
+    await transition(
+        state, message.bot, message.chat.id,
+        message.answer(
+            "🎁 <b>Введите промокод</b>\n\n"
+            "Действующие промокоды дают скидку <b>5%</b> на заказ.\n"
+            "Напишите код сообщением:",
+            reply_markup=cancel_kb(),
+        ),
+    )
+
+
+@router.message(EnterPromo.code)
+async def promo_input(message: Message, state: FSMContext):
+    if not message.text:
+        return
+    code = message.text.strip().upper()
+    if code in VALID_PROMO_CODES:
+        await save_user_promo(message.from_user.id, code)
+        discount = VALID_PROMO_CODES[code]
+        await state.clear()
+        await reset_nav(state, "main")
+        await transition(
+            state, message.bot, message.chat.id,
+            message.answer(
+                f"✅ Промокод <b>{code}</b> активирован!\n"
+                f"Вам предоставлена скидка <b>{discount}%</b> на следующий заказ.\n\n"
+                f"👆 Теперь оформите заказ как обычно — скидка применится автоматически.",
+                reply_markup=main_menu_kb(is_admin(message.from_user.id)),
+            ),
+        )
+    else:
+        await transition(
+            state, message.bot, message.chat.id,
+            message.answer(
+                "❌ Такой промокод не найден. Попробуйте ещё раз.\n\n"
+                "Введите промокод:",
+                reply_markup=cancel_kb(),
+            ),
+        )
+    await safe_delete(message)
 
 
 
