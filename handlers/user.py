@@ -51,12 +51,13 @@ async def render_screen(screen_name: str, state: FSMContext, bot: Bot, chat_id: 
     """Отрисовывает экран по его имени для навигации."""
     if screen_name == "main":
         await state.clear()
-        busy = (await get_setting("busy", "0")) == "1"
-        status_line = (
-            "\n\n🔴 Сейчас мы очень загружены, ответим чуть позже."
-            if busy
-            else "\n\n🟢 Сейчас принимаем новые заказы."
-        )
+        busy_status = await get_setting("busy", "0")
+        if busy_status == "1":
+            status_line = "\n\n🟡 Сейчас немного загружены, ответим в ближайшее время."
+        elif busy_status == "2":
+            status_line = "\n\n🔴 Сейчас мы очень загружены, ответим чуть позже."
+        else:
+            status_line = "\n\n🟢 Сейчас принимаем новые заказы."
         await transition(
             state, bot, chat_id,
             bot.send_message(
