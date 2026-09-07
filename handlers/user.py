@@ -385,18 +385,17 @@ async def get_comment(message: Message, state: FSMContext, bot: Bot):
     offer_ids = data.get("offer_ids", [])
     comment = "" if message.text == "-" else message.text
 
-    # Проверяем скидки
-    is_first_order = not await has_orders(message.from_user.id)
+    # Проверяем промокод
     promo_code = await get_user_promo(message.from_user.id)
     promo_discount = VALID_PROMO_CODES.get(promo_code, 0) if promo_code else 0
-    first_order_discount = 10 if is_first_order else 0
 
-    # Способ оплаты и крипто-скидка
+    # Способ оплаты и скидка 10% на первый заказ криптовалютой
     payment_method = data.get("payment_method", "unknown")
     payment_label = data.get("payment_method_label", "Не указан")
-    crypto_discount = 10 if payment_method == "crypto" else 0
+    is_first_order = not await has_orders(message.from_user.id)
+    first_order_crypto_discount = 10 if (is_first_order and payment_method == "crypto") else 0
 
-    total_discount = first_order_discount + promo_discount + crypto_discount
+    total_discount = first_order_crypto_discount + promo_discount
 
     order_ids = []
     titles = []
@@ -429,10 +428,8 @@ async def get_comment(message: Message, state: FSMContext, bot: Bot):
 
     # Формируем текст о скидках
     discount_lines = []
-    if is_first_order:
-        discount_lines.append("🎉 <b>Скидка 10% на первый заказ!</b>")
-    if crypto_discount:
-        discount_lines.append("🪙 <b>Скидка 10% за оплату криптовалютой!</b>")
+    if first_order_crypto_discount:
+        discount_lines.append("🎉🪙 <b>Скидка 10% на первый заказ за оплату криптовалютой!</b>")
     if promo_code:
         discount_lines.append(f"🎁 <b>Промокод {promo_code} → скидка {promo_discount}%!</b>")
     discount_text = "\n".join(discount_lines)
@@ -453,10 +450,8 @@ async def get_comment(message: Message, state: FSMContext, bot: Bot):
 
     # Информация для админа
     admin_discount_parts = []
-    if is_first_order:
-        admin_discount_parts.append("скидка 10% (первый заказ)")
-    if crypto_discount:
-        admin_discount_parts.append("скидка 10% (крипто)")
+    if first_order_crypto_discount:
+        admin_discount_parts.append("скидка 10% (первый заказ + крипто)")
     if promo_code:
         admin_discount_parts.append(f"промокод {promo_code} (-{promo_discount}%)")
     discount_admin_text = ""
