@@ -1,0 +1,17 @@
+from aiogram.fsm.state import State, StatesGroup
+
+
+class AddOffer(StatesGroup):
+    title = State()
+    description = State()
+    price = State()
+    photo = State()
+
+
+class MakeOrder(StatesGroup):
+    contact = State()
+    comment = State()
+
+
+class ContactAdmin(StatesGroup):
+    message = State()

@@ -1,0 +1,19 @@
+# Секреты и конфиг
+.env
+
+# База данных (создаётся автоматически)
+*.db
+*.sqlite3
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
