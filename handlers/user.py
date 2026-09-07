@@ -38,6 +38,7 @@ from keyboards import (
     main_menu_kb,
     offer_detail_kb,
     offers_list_kb,
+    payment_method_kb,
 )
 from states import AddOffer, ContactAdmin, EnterPromo, MakeOrder
 
@@ -126,6 +127,18 @@ async def render_screen(screen_name: str, state: FSMContext, bot: Bot, chat_id: 
                 "Отлично! Оставьте, пожалуйста, контакт для связи "
                 "(номер телефона, @username или email):",
                 reply_markup=cancel_kb(),
+            ),
+        )
+
+    elif screen_name == "payment_method":
+        await state.set_state(MakeOrder.payment_method)
+        await transition(
+            state, bot, chat_id,
+            bot.send_message(
+                chat_id,
+                "💳 <b>Выберите способ оплаты</b>\n\n"
+                "При оплате криптовалюта — скидка <b>10%</b>!",
+                reply_markup=payment_method_kb(),
             ),
         )
 
@@ -347,8 +360,23 @@ async def start_order(callback: CallbackQuery, state: FSMContext):
 @router.message(MakeOrder.contact)
 async def get_contact(message: Message, state: FSMContext):
     await state.update_data(contact=message.text)
+    await push_nav(state, "payment_method")
+    await render_screen("payment_method", state, message.bot, message.chat.id, message.from_user.id)
+
+
+@router.callback_query(F.data.startswith("payment:"))
+async def payment_method_selected(callback: CallbackQuery, state: FSMContext):
+    method = callback.data.split(":")[1]
+    method_names = {
+        "card": "💳 СБП / Карта",
+        "crypto": "🪙 Криптовалюта",
+        "stars": "⭐ Telegram Stars",
+    }
+    method_label = method_names.get(method, method)
+    await state.update_data(payment_method=method, payment_method_label=method_label)
     await push_nav(state, "order_comment")
-    await render_screen("order_comment", state, message.bot, message.chat.id, message.from_user.id)
+    await render_screen("order_comment", state, callback.bot, callback.message.chat.id, callback.from_user.id)
+    await callback.answer()
 
 
 @router.message(MakeOrder.comment)
@@ -362,7 +390,13 @@ async def get_comment(message: Message, state: FSMContext, bot: Bot):
     promo_code = await get_user_promo(message.from_user.id)
     promo_discount = VALID_PROMO_CODES.get(promo_code, 0) if promo_code else 0
     first_order_discount = 10 if is_first_order else 0
-    total_discount = first_order_discount + promo_discount
+
+    # Способ оплаты и крипто-скидка
+    payment_method = data.get("payment_method", "unknown")
+    payment_label = data.get("payment_method_label", "Не указан")
+    crypto_discount = 10 if payment_method == "crypto" else 0
+
+    total_discount = first_order_discount + promo_discount + crypto_discount
 
     order_ids = []
     titles = []
@@ -376,6 +410,7 @@ async def get_comment(message: Message, state: FSMContext, bot: Bot):
             full_name=message.from_user.full_name,
             offer_id=offer_id,
             contact=data["contact"],
+            payment_method=payment_label,
             comment=comment,
         )
         order_ids.append(order_id)
@@ -388,12 +423,16 @@ async def get_comment(message: Message, state: FSMContext, bot: Bot):
     if promo_code:
         await clear_user_promo(message.from_user.id)
 
+    # Очищаем состояние и навигацию — защита от повторной отправки
+    await state.clear()
     await reset_nav(state, "main")
 
     # Формируем текст о скидках
     discount_lines = []
     if is_first_order:
         discount_lines.append("🎉 <b>Скидка 10% на первый заказ!</b>")
+    if crypto_discount:
+        discount_lines.append("🪙 <b>Скидка 10% за оплату криптовалютой!</b>")
     if promo_code:
         discount_lines.append(f"🎁 <b>Промокод {promo_code} → скидка {promo_discount}%!</b>")
     discount_text = "\n".join(discount_lines)
@@ -412,10 +451,12 @@ async def get_comment(message: Message, state: FSMContext, bot: Bot):
 
     titles_text = "\n".join(f"- {t}" for t in titles) or "—"
 
-    # Информация о скидках для админа
+    # Информация для админа
     admin_discount_parts = []
     if is_first_order:
         admin_discount_parts.append("скидка 10% (первый заказ)")
+    if crypto_discount:
+        admin_discount_parts.append("скидка 10% (крипто)")
     if promo_code:
         admin_discount_parts.append(f"промокод {promo_code} (-{promo_discount}%)")
     discount_admin_text = ""
@@ -427,6 +468,7 @@ async def get_comment(message: Message, state: FSMContext, bot: Bot):
         f"Товары:\n{titles_text}\n\n"
         f"Клиент: {message.from_user.full_name} (@{message.from_user.username})\n"
         f"Контакт: {data['contact']}\n"
+        f"Оплата: {payment_label}\n"
         f"Комментарий: {comment or '—'}"
         f"{discount_admin_text}"
     )

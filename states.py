@@ -10,6 +10,7 @@ class AddOffer(StatesGroup):
 
 class MakeOrder(StatesGroup):
     contact = State()
+    payment_method = State()
     comment = State()
 
 

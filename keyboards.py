@@ -96,3 +96,12 @@ def cancel_kb() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     kb.button(text="⬅️ Назад", callback_data="nav_back")
     return kb.as_markup()
+
+
+def payment_method_kb() -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    kb.button(text="💳 СБП / Карта", callback_data="payment:card")
+    kb.button(text="🪙 Криптовалюта (-10%)", callback_data="payment:crypto")
+    kb.button(text="⭐ Telegram Stars", callback_data="payment:stars")
+    kb.adjust(1)
+    return kb.as_markup()
