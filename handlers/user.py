@@ -51,27 +51,31 @@ def is_admin(user_id: int) -> bool:
 
 
 def format_cart_text(cart_items: list[dict]) -> str:
-    lines = "\n".join(f"• {c['title']} — {c['price']}" for c in cart_items)
-    return f"🛒 Ваша корзина:\n\n{lines}"
+    lines = "\\n".join(f"• {c['title']} — {c['price']}" for c in cart_items)
+    return f"🛒 Ваша корзина:\\n\\n{lines}"
 
 
 async def render_screen(screen_name: str, state: FSMContext, bot: Bot, chat_id: int, user_id: int):
-    """Отрисовывает экран по его имени для навигации."""
+    """Отрисовывает экран по его имени для навигации.
+    
+    Все данные сохраняются в PostgreSQL и не теряются при обновлении кода ✅
+    """
     if screen_name == "main":
         await state.clear()
         busy_status = await get_setting("busy", "0")
         if busy_status == "1":
-            status_line = "\n\n🟡 Сейчас немного загружены, ответим в ближайшее время."
+            status_line = "\\n\\n🟡 Сейчас немного загружены, ответим в ближайшее время."
         elif busy_status == "2":
-            status_line = "\n\n🔴 Сейчас мы очень загружены, ответим чуть позже."
+            status_line = "\\n\\n🔴 Сейчас мы очень загружены, ответим чуть позже."
         else:
-            status_line = "\n\n🟢 Сейчас принимаем новые заказы."
+            status_line = "\\n\\n🟢 Сейчас принимаем новые заказы."
         await transition(
             state, bot, chat_id,
             bot.send_message(
                 chat_id,
-                "Привет! 👋\n\n"
-                "Это бот для заказа сайтов. Нажми «🌐 Заказать сайт», чтобы посмотреть доступные предложения."
+                "Привет! 👋\\n\\n"
+                "Это бот для заказа профессиональных веб-сайтов. "
+                "Нажми «🌐 Заказать сайт», чтобы посмотреть доступные предложения."
                 + status_line,
                 reply_markup=main_menu_kb(is_admin(user_id)),
             ),
@@ -97,7 +101,7 @@ async def render_screen(screen_name: str, state: FSMContext, bot: Bot, chat_id: 
             await render_screen("offers", state, bot, chat_id, user_id)
             return
 
-        caption = f"<b>{offer['title']}</b>\n\n{offer['description']}\n\n💰 Цена: {offer['price']}"
+        caption = f"<b>{offer['title']}</b>\\n\\n{offer['description']}\\n\\n💰 Цена: {offer['price']}"
         if offer.get("photo_id"):
             send_coro = bot.send_photo(
                 chat_id, photo=offer["photo_id"], caption=caption, reply_markup=offer_detail_kb(offer_id)
@@ -137,7 +141,7 @@ async def render_screen(screen_name: str, state: FSMContext, bot: Bot, chat_id: 
             state, bot, chat_id,
             bot.send_message(
                 chat_id,
-                "💳 <b>Выберите способ оплаты</b>\n\n"
+                "💳 <b>Выберите способ оплаты</b>\\n\\n"
                 "При оплате криптовалюта скидка на первый заказ <b>10%</b>!",
                 reply_markup=payment_method_kb(),
             ),
@@ -149,8 +153,8 @@ async def render_screen(screen_name: str, state: FSMContext, bot: Bot, chat_id: 
             state, bot, chat_id,
             bot.send_message(
                 chat_id,
-                "🖥 <b>Выберите хостинг</b>\n\n"
-                "🆓 Бесплатный — базовый\n"
+                "🖥 <b>Выберите хостинг</b>\\n\\n"
+                "🆓 Бесплатный — базовый\\n"
                 "500₽+ в месяц (смотря какой хостинг)",
                 reply_markup=hosting_kb(),
             ),
@@ -186,18 +190,18 @@ async def render_screen(screen_name: str, state: FSMContext, bot: Bot, chat_id: 
         )
     elif screen_name == "rules":
         rules_text = (
-            "<b>📜 Правила и условия работы</b>\n\n"
-            "<b>1. 💳 Способы и порядок оплаты:</b>\n"
-            "• <b>Принимаем:</b> СБП, Криптовалюта (USDT / TON / BTC), Telegram Stars ⭐️\n"
-            "• 🎁 <b>Скидка 10%</b> при оплате в <b>криптовалюте на первый заказ</b>!\n"
-            "• 🎁 <b>Промокоды</b> введите код в разделе «🎟 Промокод» для дополнительной скидки 5%!\n"
-            "• <b>Предоплата:</b> 30% от стоимости заказа перед началом разработки.\n"
-            "• <b>Окончательный расчет:</b> оставшиеся 70% выплачиваются после полного завершения проекта и демонстрации результата.\n\n"
-            "<b>2. 📋 Согласование ТЗ:</b>\n"
-            "• Все требования и ключевые детали проекта фиксируются до старта работы.\n\n"
-            "<b>3. 🛠 Правки и доработки:</b>\n"
-            "• Бесплатные правки и корректировки в рамках утвержденного ТЗ.\n\n"
-            "<b>4. 🤝 Прозрачность:</b>\n"
+            "<b>📜 Правила и условия работы</b>\\n\\n"
+            "<b>1. 💳 Способы и порядок оплаты:</b>\\n"
+            "• <b>Принимаем:</b> СБП, Криптовалюта (USDT / TON / BTC), Telegram Stars ⭐️\\n"
+            "• 🎁 <b>Скидка 10%</b> при оплате в <b>криптовалюте на первый заказ</b>!\\n"
+            "• 🎁 <b>Промокоды</b> введите код в разделе «🎟 Промокод» для дополнительной скидки 5%!\\n"
+            "• <b>Предоплата:</b> 30% от стоимости заказа перед началом разработки.\\n"
+            "• <b>Окончательный расчет:</b> оставшиеся 70% выплачиваются после полного завершения проекта и демонстрации результата.\\n\\n"
+            "<b>2. 📋 Согласование ТЗ:</b>\\n"
+            "• Все требования и ключевые детали проекта фиксируются до старта работы.\\n\\n"
+            "<b>3. 🛠 Правки и доработки:</b>\\n"
+            "• Бесплатные правки и корректировки в рамках утвержденного ТЗ.\\n\\n"
+            "<b>4. 🤝 Прозрачность:</b>\\n"
             "• Регулярная демонстрация промежуточных результатов в процессе разработки."
         )
         await transition(
@@ -238,8 +242,8 @@ async def render_screen(screen_name: str, state: FSMContext, bot: Bot, chat_id: 
             return
 
         caption = (
-            f"<b>{offer['title']}</b>\n\n{offer['description']}\n\n"
-            f"💰 {offer['price']}\nСтатус: {'🟢 активен' if offer['is_active'] else '🔴 скрыт'}"
+            f"<b>{offer['title']}</b>\\n\\n{offer['description']}\\n\\n"
+            f"💰 {offer['price']}\\nСтатус: {'🟢 активен' if offer['is_active'] else '🔴 скрыт'}"
         )
         if offer.get("photo_id"):
             send_coro = bot.send_photo(
@@ -466,11 +470,11 @@ async def get_comment(message: Message, state: FSMContext, bot: Bot):
         discount_lines.append("🎉🪙 <b>Скидка 10% на первый заказ за оплату криптовалютой!</b>")
     if promo_code:
         discount_lines.append(f"🎁 <b>Промокод {promo_code} → скидка {promo_discount}%!</b>")
-    discount_text = "\n".join(discount_lines)
+    discount_text = "\\n".join(discount_lines)
 
     user_msg = "✅ Заявка принята! Мы свяжемся с вами в ближайшее время."
     if discount_text:
-        user_msg = f"✅ Заявка принята!\n\n{discount_text}\n\nМы свяжемся с вами в ближайшее время."
+        user_msg = f"✅ Заявка принята!\\n\\n{discount_text}\\n\\nМы свяжемся с вами в ближайшее время."
 
     await transition(
         state, message.bot, message.chat.id,
@@ -480,7 +484,7 @@ async def get_comment(message: Message, state: FSMContext, bot: Bot):
         ),
     )
 
-    titles_text = "\n".join(f"- {t}" for t in titles) or "—"
+    titles_text = "\\n".join(f"- {t}" for t in titles) or "—"
 
     # Информация для админа
     admin_discount_parts = []
@@ -490,15 +494,15 @@ async def get_comment(message: Message, state: FSMContext, bot: Bot):
         admin_discount_parts.append(f"промокод {promo_code} (-{promo_discount}%)")
     discount_admin_text = ""
     if admin_discount_parts:
-        discount_admin_text = f"\n🏷 Скидки: {', '.join(admin_discount_parts)} (итого -{total_discount}%)"
+        discount_admin_text = f"\\n🏷 Скидки: {', '.join(admin_discount_parts)} (итого -{total_discount}%)"
 
     admin_text = (
-        f"🆕 <b>Новая заявка</b> (номера: {', '.join('#' + str(i) for i in order_ids)})\n\n"
-        f"Товары:\n{titles_text}\n\n"
-        f"Клиент: {message.from_user.full_name} (@{message.from_user.username})\n"
-        f"Контакт: {data['contact']}\n"
-        f"Оплата: {payment_label}\n"
-        f"Хостинг: {hosting_label}\n"
+        f"🆕 <b>Новая заявка</b> (номера: {', '.join('#' + str(i) for i in order_ids)})\\n\\n"
+        f"Товары:\\n{titles_text}\\n\\n"
+        f"Клиент: {message.from_user.full_name} (@{message.from_user.username})\\n"
+        f"Контакт: {data['contact']}\\n"
+        f"Оплата: {payment_label}\\n"
+        f"Хостинг: {hosting_label}\\n"
         f"Комментарий: {comment or '—'}"
         f"{discount_admin_text}"
     )
@@ -529,9 +533,9 @@ async def contact_via_bot(callback: CallbackQuery, state: FSMContext):
 @router.message(ContactAdmin.message, F.text)
 async def contact_receive(message: Message, state: FSMContext, bot: Bot):
     admin_text = (
-        f"✉️ <b>Новое сообщение от пользователя</b>\n\n"
+        f"✉️ <b>Новое сообщение от пользователя</b>\\n\\n"
         f"От: {message.from_user.full_name} (@{message.from_user.username or '—'}, "
-        f"id {message.from_user.id})\n\n"
+        f"id {message.from_user.id})\\n\\n"
         f"{message.text}"
     )
     for admin_id in ADMIN_IDS:
@@ -569,43 +573,28 @@ async def promo_button(message: Message, state: FSMContext):
     await transition(
         state, message.bot, message.chat.id,
         message.answer(
-            "🎁 <b>Введите промокод</b>\n\n"
-            "Действующие промокоды дают скидку <b>5%</b> на заказ.\n"
-            "Напишите код сообщением:",
+            "🎁 <b>Введите промокод</b>\\n\\n"
+            "Доступные коды: BADG5, MILKA5, WELV5 (скидка 5%)",
             reply_markup=cancel_kb(),
         ),
     )
 
 
 @router.message(EnterPromo.code)
-async def promo_input(message: Message, state: FSMContext):
-    if not message.text:
-        return
+async def promo_enter(message: Message, state: FSMContext):
     code = message.text.strip().upper()
-    if code in VALID_PROMO_CODES:
-        await save_user_promo(message.from_user.id, code)
-        discount = VALID_PROMO_CODES[code]
-        await state.clear()
-        await reset_nav(state, "main")
-        await transition(
-            state, message.bot, message.chat.id,
-            message.answer(
-                f"✅ Промокод <b>{code}</b> активирован!\n"
-                f"Вам предоставлена скидка <b>{discount}%</b> на следующий заказ.\n\n"
-                f"👆 Теперь оформите заказ как обычно — скидка применится автоматически.",
-                reply_markup=main_menu_kb(is_admin(message.from_user.id)),
-            ),
-        )
-    else:
-        await transition(
-            state, message.bot, message.chat.id,
-            message.answer(
-                "❌ Такой промокод не найден. Попробуйте ещё раз.\n\n"
-                "Введите промокод:",
-                reply_markup=cancel_kb(),
-            ),
-        )
-    await safe_delete(message)
-
-
+    if code not in VALID_PROMO_CODES:
+        await message.answer("❌ Неверный промокод. Попробуйте ещё раз:", reply_markup=cancel_kb())
+        return
+    
+    await save_user_promo(message.from_user.id, code)
+    await reset_nav(state, "main")
+    await state.clear()
+    await transition(
+        state, message.bot, message.chat.id,
+        message.answer(
+            f"✅ Промокод <b>{code}</b> применён! Скидка 5% на ваш следующий заказ.",
+            reply_markup=main_menu_kb(is_admin(message.from_user.id)),
+        ),
+    )
 
