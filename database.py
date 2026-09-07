@@ -1,183 +1,213 @@
-import aiosqlite
-from config import DB_PATH
+import asyncpg
+import os
+from datetime import datetime
 
-CREATE_OFFERS = """
-CREATE TABLE IF NOT EXISTS offers (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    title TEXT NOT NULL,
-    description TEXT,
-    price TEXT,
-    photo_id TEXT,
-    is_active INTEGER DEFAULT 1
-)
-"""
+DATABASE_URL = os.getenv("DATABASE_URL", "")
 
-CREATE_ORDERS = """
-CREATE TABLE IF NOT EXISTS orders (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER,
-    username TEXT,
-    full_name TEXT,
-    offer_id INTEGER,
-    contact TEXT,
-    payment_method TEXT DEFAULT 'unknown',
-    hosting TEXT DEFAULT 'free',
-    comment TEXT,
-    status TEXT DEFAULT 'new',
-    created_at TEXT DEFAULT (datetime('now'))
-)
-"""
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL не задан. Проверьте переменные окружения.")
 
-CREATE_CART = """
-CREATE TABLE IF NOT EXISTS cart (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    offer_id INTEGER NOT NULL,
-    added_at TEXT DEFAULT (datetime('now')),
-    UNIQUE(user_id, offer_id)
-)
-"""
-
-CREATE_SETTINGS = """
-CREATE TABLE IF NOT EXISTS settings (
-    key TEXT PRIMARY KEY,
-    value TEXT
-)
-"""
+pool = None
 
 
 async def init_db():
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(CREATE_OFFERS)
-        await db.execute(CREATE_ORDERS)
-        await db.execute(CREATE_CART)
-        await db.execute(CREATE_SETTINGS)
-        await db.commit()
+    """Инициализация пула подключений и создание таблиц."""
+    global pool
+    pool = await asyncpg.create_pool(DATABASE_URL, min_size=5, max_size=20)
+    
+    async with pool.acquire() as conn:
+        # Offers table
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS offers (
+                id SERIAL PRIMARY KEY,
+                title TEXT NOT NULL,
+                description TEXT,
+                price TEXT,
+                photo_id TEXT,
+                is_active INTEGER DEFAULT 1,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        
+        # Orders table
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS orders (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT,
+                username TEXT,
+                full_name TEXT,
+                offer_id INTEGER,
+                contact TEXT,
+                payment_method TEXT DEFAULT 'unknown',
+                hosting TEXT DEFAULT 'free',
+                comment TEXT,
+                status TEXT DEFAULT 'new',
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        
+        # Cart table
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS cart (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL,
+                offer_id INTEGER NOT NULL,
+                added_at TIMESTAMP DEFAULT NOW(),
+                UNIQUE(user_id, offer_id)
+            )
+        """)
+        
+        # Settings table
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT,
+                updated_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
 
 
 async def add_offer(title: str, description: str, price: str, photo_id: str) -> int:
-    async with aiosqlite.connect(DB_PATH) as db:
-        cur = await db.execute(
-            "INSERT INTO offers (title, description, price, photo_id) VALUES (?, ?, ?, ?)",
-            (title, description, price, photo_id),
+    """Добавить новый оффер."""
+    async with pool.acquire() as conn:
+        offer_id = await conn.fetchval(
+            """INSERT INTO offers (title, description, price, photo_id) 
+               VALUES ($1, $2, $3, $4) RETURNING id""",
+            title, description, price, photo_id
         )
-        await db.commit()
-        return cur.lastrowid
+        return offer_id
 
 
 async def get_active_offers():
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        cur = await db.execute("SELECT * FROM offers WHERE is_active = 1 ORDER BY id DESC")
-        rows = await cur.fetchall()
+    """Получить активные офферы."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT * FROM offers WHERE is_active = 1 ORDER BY id DESC"
+        )
         return [dict(r) for r in rows]
 
 
 async def get_all_offers():
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        cur = await db.execute("SELECT * FROM offers ORDER BY id DESC")
-        rows = await cur.fetchall()
+    """Получить все офферы."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT * FROM offers ORDER BY id DESC"
+        )
         return [dict(r) for r in rows]
 
 
 async def get_offer(offer_id: int):
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        cur = await db.execute("SELECT * FROM offers WHERE id = ?", (offer_id,))
-        row = await cur.fetchone()
+    """Получить оффер по ID."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT * FROM offers WHERE id = $1",
+            offer_id
+        )
         return dict(row) if row else None
 
 
 async def delete_offer(offer_id: int):
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute("DELETE FROM offers WHERE id = ?", (offer_id,))
-        await db.commit()
+    """Удалить оффер."""
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "DELETE FROM offers WHERE id = $1",
+            offer_id
+        )
 
 
 async def toggle_offer(offer_id: int):
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        cur = await db.execute("SELECT is_active FROM offers WHERE id = ?", (offer_id,))
-        row = await cur.fetchone()
+    """Переключить статус оффера (активный/неактивный)."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT is_active FROM offers WHERE id = $1",
+            offer_id
+        )
         if not row:
             return None
-        new_val = 0 if row["is_active"] else 1
-        await db.execute("UPDATE offers SET is_active = ? WHERE id = ?", (new_val, offer_id))
-        await db.commit()
+        new_val = 0 if row['is_active'] else 1
+        await conn.execute(
+            "UPDATE offers SET is_active = $1 WHERE id = $2",
+            new_val, offer_id
+        )
         return new_val
 
 
-async def create_order(user_id: int, username: str, full_name: str, offer_id: int, contact: str, payment_method: str, hosting: str, comment: str) -> int:
-    async with aiosqlite.connect(DB_PATH) as db:
-        cur = await db.execute(
-            "INSERT INTO orders (user_id, username, full_name, offer_id, contact, payment_method, hosting, comment) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (user_id, username, full_name, offer_id, contact, payment_method, hosting, comment),
+async def create_order(user_id: int, username: str, full_name: str, offer_id: int, 
+                       contact: str, payment_method: str, hosting: str, comment: str) -> int:
+    """Создать заказ."""
+    async with pool.acquire() as conn:
+        order_id = await conn.fetchval(
+            """INSERT INTO orders (user_id, username, full_name, offer_id, contact, 
+                                   payment_method, hosting, comment) 
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id""",
+            user_id, username, full_name, offer_id, contact, payment_method, hosting, comment
         )
-        await db.commit()
-        return cur.lastrowid
+        return order_id
 
 
 # --- Корзина ---
 
 async def add_to_cart(user_id: int, offer_id: int):
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            "INSERT OR IGNORE INTO cart (user_id, offer_id) VALUES (?, ?)",
-            (user_id, offer_id),
+    """Добавить товар в корзину."""
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """INSERT INTO cart (user_id, offer_id) VALUES ($1, $2) 
+               ON CONFLICT (user_id, offer_id) DO NOTHING""",
+            user_id, offer_id
         )
-        await db.commit()
 
 
 async def get_cart(user_id: int):
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        cur = await db.execute(
-            """
-            SELECT offers.* FROM cart
-            JOIN offers ON offers.id = cart.offer_id
-            WHERE cart.user_id = ?
-            ORDER BY cart.id
-            """,
-            (user_id,),
+    """Получить товары в корзине пользователя."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """SELECT offers.* FROM cart
+               JOIN offers ON offers.id = cart.offer_id
+               WHERE cart.user_id = $1
+               ORDER BY cart.id""",
+            user_id
         )
-        rows = await cur.fetchall()
         return [dict(r) for r in rows]
 
 
 async def remove_from_cart(user_id: int, offer_id: int):
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            "DELETE FROM cart WHERE user_id = ? AND offer_id = ?", (user_id, offer_id)
+    """Удалить товар из корзины."""
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "DELETE FROM cart WHERE user_id = $1 AND offer_id = $2",
+            user_id, offer_id
         )
-        await db.commit()
 
 
 async def clear_cart(user_id: int):
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute("DELETE FROM cart WHERE user_id = ?", (user_id,))
-        await db.commit()
+    """Очистить корзину пользователя."""
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "DELETE FROM cart WHERE user_id = $1",
+            user_id
+        )
 
 
-# --- Настройки (например, статус занятости) ---
+# --- Настройки ---
 
 async def get_setting(key: str, default: str = "") -> str:
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        cur = await db.execute("SELECT value FROM settings WHERE key = ?", (key,))
-        row = await cur.fetchone()
-        return row["value"] if row else default
+    """Получить значение настройки."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT value FROM settings WHERE key = $1",
+            key
+        )
+        return row['value'] if row else default
 
 
 async def set_setting(key: str, value: str):
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            "INSERT INTO settings (key, value) VALUES (?, ?) "
-            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            (key, value),
+    """Установить значение настройки."""
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """INSERT INTO settings (key, value) VALUES ($1, $2) 
+               ON CONFLICT (key) DO UPDATE SET value = $2""",
+            key, value
         )
-        await db.commit()
 
 
 # --- Промокоды ---
@@ -190,25 +220,30 @@ VALID_PROMO_CODES = {
 
 
 async def has_orders(user_id: int) -> bool:
-    """Проверяет, есть ли у пользователя хотя бы один заказ."""
-    async with aiosqlite.connect(DB_PATH) as db:
-        cur = await db.execute("SELECT 1 FROM orders WHERE user_id = ? LIMIT 1", (user_id,))
-        row = await cur.fetchone()
+    """Проверить, есть ли у пользователя хотя бы один заказ."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchval(
+            "SELECT 1 FROM orders WHERE user_id = $1 LIMIT 1",
+            user_id
+        )
         return row is not None
 
 
 async def save_user_promo(user_id: int, code: str):
-    """Сохраняет применённый промокод пользователя."""
+    """Сохранить применённый промокод пользователя."""
     await set_setting(f"promo_{user_id}", code)
 
 
 async def get_user_promo(user_id: int) -> str:
-    """Возвращает применённый промокод пользователя (пустая строка если нет)."""
+    """Получить применённый промокод пользователя."""
     return await get_setting(f"promo_{user_id}", "")
 
 
 async def clear_user_promo(user_id: int):
-    """Удаляет применённый промокод пользователя."""
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute("DELETE FROM settings WHERE key = ?", (f"promo_{user_id}",))
-        await db.commit()
+    """Удалить применённый промокод пользователя."""
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "DELETE FROM settings WHERE key = $1",
+            f"promo_{user_id}"
+        )
+
