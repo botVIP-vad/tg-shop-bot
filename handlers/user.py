@@ -64,16 +64,16 @@ async def render_screen(screen_name: str, state: FSMContext, bot: Bot, chat_id: 
         await state.clear()
         busy_status = await get_setting("busy", "0")
         if busy_status == "1":
-            status_line = "\\n\\n🟡 Сейчас немного загружены, ответим в ближайшее время."
+            status_line = "\n\n🟡 Сейчас немного загружены, ответим в ближайшее время."
         elif busy_status == "2":
-            status_line = "\\n\\n🔴 Сейчас мы очень загружены, ответим чуть позже."
+            status_line = "\n\n🔴 Сейчас мы очень загружены, ответим чуть позже."
         else:
-            status_line = "\\n\\n🟢 Сейчас принимаем новые заказы."
+            status_line = "\n\n🟢 Сейчас принимаем новые заказы."
         await transition(
             state, bot, chat_id,
             bot.send_message(
                 chat_id,
-                "Привет! 👋"
+                "Привет! 👋 /n/n"
                 "Это бот для заказа сайтов. Нажми «🌐 Заказать сайт», чтобы посмотреть доступные предложения."
                 + status_line,
                 reply_markup=main_menu_kb(is_admin(user_id)),
