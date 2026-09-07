@@ -56,10 +56,7 @@ def format_cart_text(cart_items: list[dict]) -> str:
 
 
 async def render_screen(screen_name: str, state: FSMContext, bot: Bot, chat_id: int, user_id: int):
-    """Отрисовывает экран по его имени для навигации.
-    
-    Все данные сохраняются в PostgreSQL и не теряются при обновлении кода ✅
-    """
+    """Отрисовывает экран по его имени для навигации."""
     if screen_name == "main":
         await state.clear()
         busy_status = await get_setting("busy", "0")
@@ -74,8 +71,7 @@ async def render_screen(screen_name: str, state: FSMContext, bot: Bot, chat_id: 
             bot.send_message(
                 chat_id,
                 "Привет! 👋\\n\\n"
-                "Это бот для заказа сайтов. "
-                "Нажми «🌐 Заказать сайт», чтобы посмотреть доступные предложения."
+                "Это бот для заказа сайтов. Нажми «🌐 Заказать сайт», чтобы посмотреть доступные предложения."
                 + status_line,
                 reply_markup=main_menu_kb(is_admin(user_id)),
             ),
@@ -574,7 +570,8 @@ async def promo_button(message: Message, state: FSMContext):
         state, message.bot, message.chat.id,
         message.answer(
             "🎁 <b>Введите промокод</b>\\n\\n"
-            "Доступные коды: BADG5, MILKA5, WELV5 (скидка 5%)",
+            "Действующие промокоды дают скидку <b>5%</b> на заказ.\\n"
+            "Напишите код сообщением:",
             reply_markup=cancel_kb(),
         ),
     )
