@@ -572,11 +572,13 @@ async def promo_button(message: Message, state: FSMContext):
     await transition(
         state, message.bot, message.chat.id,
         message.answer(
-            "🎁 <b>Введите промокод</b>\\n\\n"
-            "Доступные коды: BADG5, MILKA5, WELV5 (скидка 5%)",
+            "🎁 <b>Введите промокод</b>\n\n"
+            "Действующие промокоды дают скидку <b>5%</b> на заказ.\n"
+            "Напишите код сообщением:",
             reply_markup=cancel_kb(),
         ),
     )
+
 
 
 @router.message(EnterPromo.code)
