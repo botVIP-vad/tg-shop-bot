@@ -6,12 +6,13 @@ def main_menu_kb(is_admin: bool = False) -> ReplyKeyboardMarkup:
     kb = ReplyKeyboardBuilder()
     kb.button(text="🌐 Заказать сайт")
     kb.button(text="🛒 Корзина")
+    kb.button(text="📜 Условия работы")
     kb.button(text="💬 Написать нам")
     if is_admin:
         kb.button(text="⚙️ Админ-панель")
-        kb.adjust(2, 2)
+        kb.adjust(2, 2, 1)
     else:
-        kb.adjust(2, 1)
+        kb.adjust(2, 2)
     return kb.as_markup(resize_keyboard=True)
 
 

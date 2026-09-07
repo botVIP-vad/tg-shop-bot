@@ -149,7 +149,24 @@ async def render_screen(screen_name: str, state: FSMContext, bot: Bot, chat_id: 
                 chat_id,
                 "Напишите ваше сообщение одним текстом — мы получим его и ответим.",
                 reply_markup=cancel_kb(),
-            ),
+    elif screen_name == "rules":
+        rules_text = (
+            "<b>📜 Правила и условия работы</b>\n\n"
+            "<b>1. 💳 Порядок оплаты:</b>\n"
+            "• <b>Предоплата:</b> 30% от стоимости заказа перед началом разработки.\n"
+            "• <b>Окончательный расчет:</b> оставшиеся 70% выплачиваются после полного завершения проекта и демонстрации результата.\n\n"
+            "<b>2. 📋 Согласование ТЗ:</b>\n"
+            "• Все требования и ключевые детали проекта фиксируются до старта работы.\n\n"
+            "<b>3. 🛠 Правки и доработки:</b>\n"
+            "• Бесплатные правки и корректировки в рамках утвержденного ТЗ.\n\n"
+            "<b>4. 🔒 Гарантия и поддержка:</b>\n"
+            "• <b>14 дней</b> бесплатной технической поддержки и устранения ошибок после передачи проекта.\n\n"
+            "<b>5. 🤝 Прозрачность:</b>\n"
+            "• Регулярная демонстрация промежуточных результатов в процессе разработки."
+        )
+        await transition(
+            state, bot, chat_id,
+            bot.send_message(chat_id, rules_text, reply_markup=cancel_kb())
         )
 
     elif screen_name == "admin_panel":
@@ -413,6 +430,15 @@ async def contact_receive(message: Message, state: FSMContext, bot: Bot):
             reply_markup=main_menu_kb(is_admin(message.from_user.id)),
         ),
     )
+
+
+@router.message(F.text == "📜 Условия работы")
+async def show_rules(message: Message, state: FSMContext):
+    await handle_bottom_menu_message(state, message.bot, message.chat.id, message.message_id)
+    await reset_nav(state, "main")
+    await push_nav(state, "rules")
+    await render_screen("rules", state, message.bot, message.chat.id, message.from_user.id)
+
 
 
 
