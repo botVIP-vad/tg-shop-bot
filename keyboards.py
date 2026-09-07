@@ -53,12 +53,10 @@ def contact_options_kb(admin_username: str) -> InlineKeyboardMarkup:
     return kb.as_markup()
 
 
-def admin_panel_kb(busy: bool = False) -> InlineKeyboardMarkup:
 def admin_panel_kb(busy_status: str = "0") -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     kb.button(text="➕ Добавить оффер", callback_data="admin_add_offer")
     kb.button(text="📋 Список офферов", callback_data="admin_list_offers")
-    status_text = "🔴 Занят — нажмите, чтобы освободиться" if busy else "🟢 Свободен — нажмите, чтобы отметить занятость"
     if busy_status == "1":
         status_text = "🟡 Немного занят — нажмите, чтобы изменить"
     elif busy_status == "2":
