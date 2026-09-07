@@ -6,13 +6,14 @@ def main_menu_kb(is_admin: bool = False) -> ReplyKeyboardMarkup:
     kb = ReplyKeyboardBuilder()
     kb.button(text="🌐 Заказать сайт")
     kb.button(text="🛒 Корзина")
+    kb.button(text="🎟 Промокод")
     kb.button(text="📜 Условия работы")
     kb.button(text="💬 Написать нам")
     if is_admin:
         kb.button(text="⚙️ Админ-панель")
-        kb.adjust(2, 2, 1)
+        kb.adjust(2, 3, 1)
     else:
-        kb.adjust(2, 2)
+        kb.adjust(2, 3)
     return kb.as_markup(resize_keyboard=True)
 
 
@@ -40,6 +41,7 @@ def cart_kb(cart_items: list[dict]) -> InlineKeyboardMarkup:
         kb.button(text=f"❌ Убрать: {item['title']}", callback_data=f"cart_remove:{item['id']}")
     if cart_items:
         kb.button(text="✅ Оформить заказ", callback_data="cart_checkout")
+    kb.button(text="🎟 Ввести промокод", callback_data="promo_input")
     kb.button(text="⬅️ Назад", callback_data="nav_back")
     kb.adjust(1)
     return kb.as_markup()

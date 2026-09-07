@@ -15,3 +15,7 @@ class MakeOrder(StatesGroup):
 
 class ContactAdmin(StatesGroup):
     message = State()
+
+
+class EnterPromo(StatesGroup):
+    code = State()
