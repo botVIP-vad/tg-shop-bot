@@ -100,8 +100,18 @@ def cancel_kb() -> InlineKeyboardMarkup:
 
 def payment_method_kb() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    kb.button(text="💳 СБП / Карта", callback_data="payment:card")
+    kb.button(text="💳 СБП (QR-код)", callback_data="payment:card")
     kb.button(text="🪙 Криптовалюта (-10%)", callback_data="payment:crypto")
     kb.button(text="⭐ Telegram Stars", callback_data="payment:stars")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def hosting_kb() -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    kb.button(text="🆓 Бесплатный", callback_data="hosting:free")
+    kb.button(text="💎 Базовый — 500₽/мес", callback_data="hosting:basic")
+    kb.button(text="🚀 Стандарт — 1000₽/мес", callback_data="hosting:standard")
+    kb.button(text="👑 Премиум — 2000₽/мес", callback_data="hosting:premium")
     kb.adjust(1)
     return kb.as_markup()

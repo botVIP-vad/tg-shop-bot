@@ -11,6 +11,7 @@ class AddOffer(StatesGroup):
 class MakeOrder(StatesGroup):
     contact = State()
     payment_method = State()
+    hosting = State()
     comment = State()
 
 

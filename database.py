@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS orders (
     offer_id INTEGER,
     contact TEXT,
     payment_method TEXT DEFAULT 'unknown',
+    hosting TEXT DEFAULT 'free',
     comment TEXT,
     status TEXT DEFAULT 'new',
     created_at TEXT DEFAULT (datetime('now'))
@@ -107,12 +108,12 @@ async def toggle_offer(offer_id: int):
         return new_val
 
 
-async def create_order(user_id: int, username: str, full_name: str, offer_id: int, contact: str, payment_method: str, comment: str) -> int:
+async def create_order(user_id: int, username: str, full_name: str, offer_id: int, contact: str, payment_method: str, hosting: str, comment: str) -> int:
     async with aiosqlite.connect(DB_PATH) as db:
         cur = await db.execute(
-            "INSERT INTO orders (user_id, username, full_name, offer_id, contact, payment_method, comment) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (user_id, username, full_name, offer_id, contact, payment_method, comment),
+            "INSERT INTO orders (user_id, username, full_name, offer_id, contact, payment_method, hosting, comment) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (user_id, username, full_name, offer_id, contact, payment_method, hosting, comment),
         )
         await db.commit()
         return cur.lastrowid

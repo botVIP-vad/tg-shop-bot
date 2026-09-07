@@ -35,6 +35,7 @@ from keyboards import (
     cancel_kb,
     cart_kb,
     contact_options_kb,
+    hosting_kb,
     main_menu_kb,
     offer_detail_kb,
     offers_list_kb,
@@ -142,6 +143,19 @@ async def render_screen(screen_name: str, state: FSMContext, bot: Bot, chat_id: 
             ),
         )
 
+    elif screen_name == "hosting":
+        await state.set_state(MakeOrder.hosting)
+        await transition(
+            state, bot, chat_id,
+            bot.send_message(
+                chat_id,
+                "🖥 <b>Выберите хостинг</b>\n\n"
+                "🆓 Бесплатный — базовый\n"
+                "500₽+ в месяц (смотря какой хостинг)",
+                reply_markup=hosting_kb(),
+            ),
+        )
+
     elif screen_name == "order_comment":
         await state.set_state(MakeOrder.comment)
         await transition(
@@ -174,7 +188,7 @@ async def render_screen(screen_name: str, state: FSMContext, bot: Bot, chat_id: 
         rules_text = (
             "<b>📜 Правила и условия работы</b>\n\n"
             "<b>1. 💳 Способы и порядок оплаты:</b>\n"
-            "• <b>Принимаем:</b> СБП / Карты, Криптовалюта (USDT / TON / BTC), Telegram Stars ⭐️\n"
+            "• <b>Принимаем:</b> СБП, Криптовалюта (USDT / TON / BTC), Telegram Stars ⭐️\n"
             "• 🎁 <b>Скидка 10%</b> при оплате в <b>криптовалюте на первый заказ</b>!\n"
             "• 🎁 <b>Промокоды</b> введите код в разделе «🎟 Промокод» для дополнительной скидки 5%!\n"
             "• <b>Предоплата:</b> 30% от стоимости заказа перед началом разработки.\n"
@@ -367,12 +381,28 @@ async def get_contact(message: Message, state: FSMContext):
 async def payment_method_selected(callback: CallbackQuery, state: FSMContext):
     method = callback.data.split(":")[1]
     method_names = {
-        "card": "💳 СБП / Карта",
+        "card": "💳 СБП (QR-код)",
         "crypto": "🪙 Криптовалюта",
         "stars": "⭐ Telegram Stars",
     }
     method_label = method_names.get(method, method)
     await state.update_data(payment_method=method, payment_method_label=method_label)
+    await push_nav(state, "hosting")
+    await render_screen("hosting", state, callback.bot, callback.message.chat.id, callback.from_user.id)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("hosting:"))
+async def hosting_selected(callback: CallbackQuery, state: FSMContext):
+    hosting_type = callback.data.split(":")[1]
+    hosting_names = {
+        "free": "🆓 Бесплатный",
+        "basic": "💎 Базовый (500₽/мес)",
+        "standard": "🚀 Стандарт (1000₽/мес)",
+        "premium": "👑 Премиум (2000₽/мес)",
+    }
+    hosting_label = hosting_names.get(hosting_type, hosting_type)
+    await state.update_data(hosting=hosting_type, hosting_label=hosting_label)
     await push_nav(state, "order_comment")
     await render_screen("order_comment", state, callback.bot, callback.message.chat.id, callback.from_user.id)
     await callback.answer()
@@ -394,6 +424,10 @@ async def get_comment(message: Message, state: FSMContext, bot: Bot):
     is_first_order = not await has_orders(message.from_user.id)
     first_order_crypto_discount = 10 if (is_first_order and payment_method == "crypto") else 0
 
+    # Хостин
+    hosting_type = data.get("hosting", "free")
+    hosting_label = data.get("hosting_label", "🆓 Бесплатный")
+
     total_discount = first_order_crypto_discount + promo_discount
 
     order_ids = []
@@ -409,6 +443,7 @@ async def get_comment(message: Message, state: FSMContext, bot: Bot):
             offer_id=offer_id,
             contact=data["contact"],
             payment_method=payment_label,
+            hosting=hosting_label,
             comment=comment,
         )
         order_ids.append(order_id)
@@ -463,6 +498,7 @@ async def get_comment(message: Message, state: FSMContext, bot: Bot):
         f"Клиент: {message.from_user.full_name} (@{message.from_user.username})\n"
         f"Контакт: {data['contact']}\n"
         f"Оплата: {payment_label}\n"
+        f"Хостинг: {hosting_label}\n"
         f"Комментарий: {comment or '—'}"
         f"{discount_admin_text}"
     )
