@@ -51,12 +51,13 @@ async def render_screen(screen_name: str, state: FSMContext, bot: Bot, chat_id: 
     """Отрисовывает экран по его имени для навигации."""
     if screen_name == "main":
         await state.clear()
-        busy = (await get_setting("busy", "0")) == "1"
-        status_line = (
-            "\n\n🔴 Сейчас мы очень загружены, ответим чуть позже."
-            if busy
-            else "\n\n🟢 Сейчас принимаем новые заказы."
-        )
+        busy_status = await get_setting("busy", "0")
+        if busy_status == "1":
+            status_line = "\n\n🟡 Сейчас немного загружены, ответим в ближайшее время."
+        elif busy_status == "2":
+            status_line = "\n\n🔴 Сейчас мы очень загружены, ответим чуть позже."
+        else:
+            status_line = "\n\n🟢 Сейчас принимаем новые заказы."
         await transition(
             state, bot, chat_id,
             bot.send_message(
@@ -151,23 +152,12 @@ async def render_screen(screen_name: str, state: FSMContext, bot: Bot, chat_id: 
             ),
         )
 
-    elif screen_name == "my_orders":
-        await transition(
-            state, bot, chat_id,
-            bot.send_message(
-                chat_id,
-                "Раздел «Мои заявки» можно расширить под ваши задачи — "
-                "например, показывать статус заказа. Сейчас просто ждите обратной связи от менеджера 🙂",
-                reply_markup=cancel_kb(),
-            ),
-        )
-
     elif screen_name == "admin_panel":
         await state.clear()
-        busy = (await get_setting("busy", "0")) == "1"
+        busy_status = await get_setting("busy", "0")
         await transition(
             state, bot, chat_id,
-            bot.send_message(chat_id, "⚙️ Админ-панель", reply_markup=admin_panel_kb(busy))
+            bot.send_message(chat_id, "⚙️ Админ-панель", reply_markup=admin_panel_kb(busy_status))
         )
 
     elif screen_name == "admin_offers":
@@ -425,9 +415,4 @@ async def contact_receive(message: Message, state: FSMContext, bot: Bot):
     )
 
 
-@router.message(F.text == "ℹ️ Мои заявки")
-async def my_orders_stub(message: Message, state: FSMContext):
-    await handle_bottom_menu_message(state, message.bot, message.chat.id, message.message_id)
-    await reset_nav(state, "main")
-    await push_nav(state, "my_orders")
-    await render_screen("my_orders", state, message.bot, message.chat.id, message.from_user.id)
+

@@ -46,11 +46,16 @@ async def admin_toggle_busy(callback: CallbackQuery):
         await callback.answer("Недостаточно прав", show_alert=True)
         return
     current = await get_setting("busy", "0")
-    new_val = "0" if current == "1" else "1"
+    if current == "0":
+        new_val = "1"
+    elif current == "1":
+        new_val = "2"
+    else:
+        new_val = "0"
     await set_setting("busy", new_val)
     await callback.answer("Статус обновлён")
     try:
-        await callback.message.edit_reply_markup(reply_markup=admin_panel_kb(new_val == "1"))
+        await callback.message.edit_reply_markup(reply_markup=admin_panel_kb(new_val))
     except Exception:
         pass
 
